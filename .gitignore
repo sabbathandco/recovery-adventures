@@ -1,0 +1,2 @@
+.env # overwrite or keep existing
+.DS_Store

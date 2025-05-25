@@ -1,0 +1,11 @@
+{
+  "crons": [
+    {
+      "path": "/api/daily-email",
+      "schedule": "0 13 * * *"   
+    }
+  ],
+  "functions": {
+    "api/**.js": { "maxDuration": 300 }
+  }
+}
