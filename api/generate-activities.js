@@ -28,8 +28,10 @@ Return ONLY strict JSON matching the schema: { "activities":[{id,category,emoji,
   ];
 
   const resp = await openai.chat.completions.create({
-    model: process.env.OPENAI_MODEL ?? "o3",
-    messages
+    model: process.env.OPENAI_MODEL ?? "o3-2025-04-16",
+    messages,
+    reasoning_effort : "medium",
+    response_format  : { type: "json_object" },
   });
 
   let activities;

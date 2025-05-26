@@ -37,8 +37,10 @@ strict JSON as earlier. Patient phase = ${phase}. ${avoidHint}`
   let activities;
   try {
     const resp = await openai.chat.completions.create({
-      model   : process.env.OPENAI_MODEL ?? "o3",
-      messages
+      model   : process.env.OPENAI_MODEL ?? "o3-2025-04-16",
+      messages,
+      reasoning_effort : "medium",
+      response_format  : { type: "json_object" },
       // temperature omitted (o3 forces 1 anyway)
     });
 
