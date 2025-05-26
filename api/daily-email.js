@@ -4,6 +4,7 @@ import OpenAI from "openai";
 import dayjs from "dayjs";
 import { parseClaude } from "../lib/validator.js";
 import { ensureLinks } from "../lib/link-check.js";
+import { fallbackActivities } from "./generate-activities.js";
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 const openai = new OpenAI();
@@ -37,7 +38,7 @@ strict JSON as earlier.  Patient phase = ${phase}.  ${avoidHint}`
     const resp = await openai.chat.completions.create({
       model: process.env.OPENAI_MODEL ?? "o3",
       messages,
-      temperature: 0.7
+      temperature: 1
     });
     activities = parseClaude(resp.choices[0].message.content).activities;
   } catch (e) {
