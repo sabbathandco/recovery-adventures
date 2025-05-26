@@ -98,7 +98,7 @@ export default async (_req, res) => {
     };
 
     const chat = await openai.chat.completions.create({
-      model: "o3-chat",
+      model: "o3-2025-04-16",
       messages: [prompt],
       response_format: { type: "json_object" },
       temperature: 0.7,
