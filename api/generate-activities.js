@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { parseClaude } from "../lib/validator.js";
+import { parseClaude, normalise } from "../lib/validator.js";
 import { ensureLinks } from "../lib/link-check.js";
 import {
   NEWSLETTERS_DAILY,
@@ -40,15 +40,17 @@ Return ONLY strict JSON matching the schema: { "activities":[{id,category,emoji,
   );
 
   let activities;
-  try {
+    try {
     activities = parseClaude(resp.choices[0].message.content);
   } catch (e) {
     console.error("Validator fail, falling back:", e);
     activities = fallbackActivities();   // use local helper
   }
 
-  await Promise.all(activities.activities.map(ensureLinks));
-  return res.status(200).json(activities);
+  const fixed = normalise(activities.activities);
+  await Promise.all(fixed.map(ensureLinks));
+
+  return res.status(200).json({ activities: fixed }); 
 }
 
 export function fallbackActivities() {

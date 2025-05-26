@@ -12,7 +12,8 @@
         "@vercel/kv": "latest",
         "axios": "^1.7.2",
         "dayjs": "^1.11.13",
-        "openai": "^4.20.0"
+        "openai": "^4.20.0",
+        "slugify": "^1.6.6"
     },
     "engines": {
         "node": ">=18"
