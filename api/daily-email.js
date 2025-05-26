@@ -1,79 +1,136 @@
 import { kv } from "@vercel/kv";
 import sgMail from "@sendgrid/mail";
-import OpenAI from "openai";
 import dayjs from "dayjs";
-import { parseClaude, normalise } from "../lib/validator.js";
-import { ensureLinks } from "../lib/link-check.js";
-import { fallbackActivities } from "./generate-activities.js";
+import { openai } from "../utils/openaiClient.js";
+import { safeParseO3 } from "../utils/safeParseO3.js";
+import axios from "axios";
 
+/* -------------------------------------------------- */
+/* Config                                             */
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
-//  — give the SDK its key as well, just like in generate-activities
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const QUOTES = [
+  "“Healing is a matter of time, but it is sometimes also a matter of opportunity.” — Hippocrates",
+  "“Nature does not hurry, yet everything is accomplished.” — Lao Tzu",
+  "“The creation of a thousand forests is in one acorn.” — R. W. Emerson",
+];
 
-export default async function handler(req, res) {
-  /* ------------------------------------------------------------ */
-  /* 1) PHASE                                                    */
-  const today   = dayjs().startOf("day");
-  const sx      = dayjs(process.env.SURGERY_DATE);          // YYYY-MM-DD
-  const days    = today.diff(sx, "day");
-  const phase   = days < 15 ? "very limited"
-                : days < 46 ? "moderate"
-                :             "near normal";
+/* -------------------------------------------------- */
+/* Helpers                                            */
+const FALLBACK = {
+  gardening: "https://www.epicgardening.com/",
+  reading: "https://cozymystery.com/",
+  crochet: "https://www.mooglyblog.com/",
+  birding: "https://www.birdsandblooms.com/",
+  default: "https://www.goodnewsnetwork.org/",
+};
 
-  /* ------------------------------------------------------------ */
-  /* 2) BUILD PROMPT & AVOID RECENT IDS                          */
-  const sent      = (await kv.get("anne:sentIds")) ?? [];
-  const avoidHint = sent.length ? `Avoid these IDs: ${sent.join(", ")}.` : "";
+const headCheck = async (act) => {
+  for (const ref of act.references) {
+    try {
+      const { status } = await axios.head(ref.url, { timeout: 6000 });
+      if (status >= 400) throw new Error();
+    } catch {
+      const key = Object.keys(FALLBACK).find((k) => act.id.startsWith(k));
+      ref.url = FALLBACK[key] ?? FALLBACK.default;
+      ref.name += " (fallback)";
+    }
+  }
+  return act;
+};
 
-  const messages = [{
-    role : "system",
-    content : `You are Recovery-Bot. Generate *4 creative activities* only,
-strict JSON as earlier. Patient phase = ${phase}. ${avoidHint}`
-  }];
+const htmlEmail = (quote, acts) => {
+  const rows = acts
+    .map(
+      (a) => `
+<h2 style="margin:24px 0 6px;font-size:20px;">${a.emoji} ${a.title}</h2>
+<p style="margin:0 0 12px;line-height:1.5;">${a.description}</p>
+<p style="margin:0 0 12px;">
+  <a href="${a.references[0].url}" style="color:#3481f6;">${a.references[0].name}</a><br>
+  <a href="${a.references[1].url}" style="color:#3481f6;">${a.references[1].name}</a>
+</p>`
+    )
+    .join("");
+  return `<!DOCTYPE html><html><body style="font-family:Poppins,Arial;">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;">
+<tr><td align="center" style="padding:40px 30px 20px;">
+  <h1 style="margin:0;font-size:28px;">🌸 Recovery Adventures</h1>
+  <p style="margin:12px 0 0;color:#555;">Gentle inspiration while your ACL heals</p>
+</td></tr>
+<tr><td style="padding:0 30px 30px;">
+  <blockquote style="margin:0;padding:20px;background:#f0f8ff;border-left:4px solid #b8e3ff;">${quote}</blockquote>
+</td></tr>
+<tr><td style="padding:0 30px;">${rows}</td></tr>
+<tr><td align="center" style="padding:30px;color:#777;font-size:14px;">
+  ❤️ You’ve got this, Anne!
+</td></tr>
+</table></td></tr></table></body></html>`;
+};
 
-  /* ------------------------------------------------------------ */
-  /* 3)  CALL THE MODEL  (with guard-rail)                       */
-  let activities;
+/* -------------------------------------------------- */
+/* Handler (cron)                                     */
+export default async (_req, res) => {
   try {
-    const resp = await openai.chat.completions.create({
-      model   : process.env.OPENAI_MODEL ?? "o3-2025-04-16",
-      messages,
-      reasoning_effort : "medium",
-      response_format  : { type: "json_object" },
-      // temperature omitted (o3 forces 1 anyway)
+    /* 1 phase label */
+    const daysPost = dayjs().diff(dayjs(process.env.SURGERY_DATE), "day");
+    const phase =
+      daysPost < 15 ? "very limited" : daysPost < 46 ? "moderate" : "near normal";
+
+    /* 2 duplicate guard */
+    const sent = (await kv.get("anne:sentIds")) ?? [];
+    const avoidIds = sent
+      .filter((r) => (Date.now() - r.last) / 864e5 < 45)
+      .map((r) => r.id);
+
+    /* 3 prompt */
+    const prompt = {
+      role: "system",
+      content: `You are Recovery-Bot. Produce STRICT JSON that matches:
+{
+ "activities":[
+   {id,category,emoji,title,description,references:[{name,url}]}` + "]}\n\n" +
+        `Rules:
+• exactly 4 creative activities, friendly for ACL recovery (phase: ${phase})
+• ids camel_or_kebab_case and unique
+• at least 2 working reference links each
+• avoidIds: ${avoidIds.join(", ") || "none"} `,
+    };
+
+    const chat = await openai.chat.completions.create({
+      model: "o3-chat",
+      messages: [prompt],
+      response_format: { type: "json_object" },
+      temperature: 0.7,
     });
 
-    console.log(
-        "RAW MODEL REPLY:",
-        resp.choices[0].message.content.slice(0, 300)
-      );
+    /* 4 validate & link-check */
+    let acts = safeParseO3(chat.choices[0].message.content).activities;
+    acts = (await Promise.all(acts.map(headCheck))).slice(0, 4);
 
-      activities = normalise(                             // ← NEW
-        parseClaude(resp.choices[0].message.content).activities
-      );
-  } catch (err) {
-    console.error("parse/model fail → using fallback:", err);
-    activities = fallbackActivities().activities;
+    /* 5 store ids */
+    await kv.set(
+      "anne:sentIds",
+      [
+        ...sent,
+        ...acts.map((id) => ({ id: id.id, last: Date.now(), count: 1 })),
+      ].slice(-120)
+    );
+
+    /* 6 email */
+    await sgMail.send({
+      to: process.env.TO_EMAIL,
+      from: process.env.FROM_EMAIL,
+      subject: "🌸 Recovery Adventures – Gentle Inspiration for Today",
+      html: htmlEmail(
+        QUOTES[Math.floor(Math.random() * QUOTES.length)],
+        acts
+      ),
+    });
+
+    res.status(200).json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
   }
-
-  /* 4)  link-check & remember ids                               */
-  await Promise.all(activities.map(ensureLinks));
-  await kv.set(
-    "anne:sentIds",
-    [...sent, ...activities.map(a => a.id)].slice(-120)
-  );
-
-  /* 5)  template payload                                         */
-  const dynamicTemplateData = { activities };
-
-  /* 6)  SEND                                                     */
-  await sgMail.send({
-    to         : [process.env.SEND_TO, "sabbathj@gmail.com"],
-    from       : process.env.SEND_FROM,
-    templateId : process.env.SENDGRID_TEMPLATE_ID,
-    dynamicTemplateData
-  });
-
-  return res.status(200).json({ ok: true });
-}
+};
