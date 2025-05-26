@@ -34,6 +34,11 @@ Return ONLY strict JSON matching the schema: { "activities":[{id,category,emoji,
     response_format  : { type: "json_object" },
   });
 
+  console.log(
+    "RAW MODEL REPLY:",
+    resp.choices[0].message.content.slice(0, 300)
+  );
+
   let activities;
   try {
     activities = parseClaude(resp.choices[0].message.content);

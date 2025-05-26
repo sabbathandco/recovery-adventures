@@ -44,6 +44,11 @@ strict JSON as earlier. Patient phase = ${phase}. ${avoidHint}`
       // temperature omitted (o3 forces 1 anyway)
     });
 
+    console.log(
+        "RAW MODEL REPLY:",
+        resp.choices[0].message.content.slice(0, 300)
+      );
+
     activities =
       parseClaude(resp.choices[0].message.content).activities;   // <-- can throw
   } catch (err) {
