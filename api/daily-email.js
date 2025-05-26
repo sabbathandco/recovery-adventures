@@ -58,11 +58,14 @@ strict JSON as earlier.  Patient phase = ${phase}.  ${avoidHint}`
 
   // 6) send email
   await sgMail.send({
-    to: process.env.SEND_TO,
+    to: [
+      process.env.SEND_TO,   // Anne
+      "sabbathj@gmail.com"   // You
+    ],
     from: process.env.SEND_FROM,
     templateId: process.env.SENDGRID_TEMPLATE_ID,
     dynamicTemplateData
-  }); 
+  });
 
   return res.status(200).json({ ok: true });
 }
