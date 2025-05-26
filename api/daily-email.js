@@ -101,7 +101,6 @@ export default async (_req, res) => {
       model: "o3-2025-04-16",
       messages: [prompt],
       response_format: { type: "json_object" },
-      temperature: 0.7,
     });
 
     /* 4 validate & link-check */
