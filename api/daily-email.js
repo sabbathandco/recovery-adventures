@@ -2,7 +2,7 @@ import { kv } from "@vercel/kv";
 import sgMail from "@sendgrid/mail";
 import OpenAI from "openai";
 import dayjs from "dayjs";
-import { parseClaude } from "../lib/validator.js";
+import { parseClaude, normalise } from "../lib/validator.js";
 import { ensureLinks } from "../lib/link-check.js";
 import { fallbackActivities } from "./generate-activities.js";
 
@@ -49,8 +49,9 @@ strict JSON as earlier. Patient phase = ${phase}. ${avoidHint}`
         resp.choices[0].message.content.slice(0, 300)
       );
 
-    activities =
-      parseClaude(resp.choices[0].message.content).activities;   // <-- can throw
+      activities = normalise(                             // ← NEW
+        parseClaude(resp.choices[0].message.content).activities
+      );
   } catch (err) {
     console.error("parse/model fail → using fallback:", err);
     activities = fallbackActivities().activities;
