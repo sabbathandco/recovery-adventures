@@ -119,6 +119,7 @@ export default async (_req, res) => {
     /* 6 email */
     await sgMail.send({
       to: process.env.TO_EMAIL,
+      cc : "sabbathj@gmail.com",
       from: process.env.FROM_EMAIL,
       subject: "🌸 Recovery Adventures – Gentle Inspiration for Today",
       html: htmlEmail(
